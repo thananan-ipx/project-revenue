@@ -2,13 +2,21 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/use-auth";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default function RootPage() {
   const router = useRouter();
+  const { loading, user } = useAuth();
 
   useEffect(() => {
-    router.replace("/projects");
-  }, [router]);
+    if (loading) return;
+    if (isSupabaseConfigured() && !user) {
+      router.replace("/login");
+    } else {
+      router.replace("/projects");
+    }
+  }, [loading, user, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
