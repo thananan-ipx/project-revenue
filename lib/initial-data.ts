@@ -1,4 +1,4 @@
-import { PositionRate, OverheadItem, Project, Employee, Product, Subscription, Customer } from "./types";
+import { PositionRate, OverheadItem, Project, Employee, Product, Subscription, Customer, CommissionPayee, Commission } from "./types";
 
 // วันที่อ้างอิงเริ่มต้นของ overhead ทั้งหมด (สามารถปรับใน UI ภายหลัง)
 const DEFAULT_EFFECTIVE_FROM = "2024-01-01";
@@ -59,6 +59,10 @@ export const DEFAULT_PRODUCTS: Product[] = [
 export const DEFAULT_SUBSCRIPTIONS: Subscription[] = [];
 
 export const DEFAULT_CUSTOMERS: Customer[] = [];
+
+export const DEFAULT_COMMISSION_PAYEES: CommissionPayee[] = [];
+
+export const DEFAULT_COMMISSIONS: Commission[] = [];
 
 export const DEFAULT_PROJECTS: Project[] = [
   {

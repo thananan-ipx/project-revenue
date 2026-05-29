@@ -6,7 +6,7 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { CashflowView } from "@/components/project-cost/cashflow-view";
 
 export default function CashflowPage() {
-  const { projects, positions, overheads, employees, subscriptions, products, cashflowSettings, setCashflowSettings } = useAppState();
+  const { projects, positions, overheads, employees, subscriptions, products, commissions, commissionPayees, cashflowSettings, setCashflowSettings } = useAppState();
 
   return (
     <AppLayout>
@@ -17,6 +17,8 @@ export default function CashflowPage() {
         employees={employees}
         subscriptions={subscriptions}
         products={products}
+        commissions={commissions}
+        commissionPayees={commissionPayees}
         cashflowSettings={cashflowSettings}
         onUpdateCashflowSettings={setCashflowSettings}
       />

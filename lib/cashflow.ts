@@ -1,7 +1,8 @@
-import { Project, PositionRate, OverheadItem, Employee, Subscription, Product } from "./types";
+import { Project, PositionRate, OverheadItem, Employee, Subscription, Product, Commission, CommissionPayee } from "./types";
 import { calculateProjectCosts } from "./calculations";
 import { getProjectDateRange, TimelineWindow, computeYearWindow } from "./resource-planning";
 import { expandSubscriptionInflows } from "./subscriptions";
+import { expandCommissionPayouts } from "./commissions";
 
 /** projectId สังเคราะห์สำหรับรวมรายรับประจำ (subscriptions) เป็น series เดียวในกราฟ */
 export const RECURRING_INFLOW_PROJECT_ID = "__recurring__";
@@ -37,7 +38,7 @@ export interface CashflowInflowDetail {
 export interface CashflowOutflowDetail {
   projectId?: string; // undefined = overhead/payroll (company-wide)
   projectName?: string;
-  category: "labor" | "direct" | "contingency" | "overhead" | "payroll" | "bonus";
+  category: "labor" | "direct" | "contingency" | "overhead" | "payroll" | "bonus" | "commission";
   label: string;
   amount: number;
 }
@@ -76,6 +77,12 @@ export interface CashflowOptions {
   products?: Product[];
   /** รวมรายรับประจำเข้า inflow หรือไม่ (default true) */
   includeSubscriptions?: boolean;
+  /** รายการค่าคอม — เพิ่มเป็น outflow */
+  commissions?: Commission[];
+  /** ผู้รับคอม — ใช้ระบุชื่อใน outflow detail */
+  commissionPayees?: CommissionPayee[];
+  /** รวมค่าคอมเข้า outflow หรือไม่ (default true) */
+  includeCommissions?: boolean;
 }
 
 /**
@@ -109,6 +116,9 @@ export function computeCashflow(
   const includeSubscriptions = options.includeSubscriptions ?? true;
   const subscriptions = options.subscriptions ?? [];
   const products = options.products ?? [];
+  const includeCommissions = options.includeCommissions ?? true;
+  const commissions = options.commissions ?? [];
+  const commissionPayees = options.commissionPayees ?? [];
 
   // Initialize months
   const months: CashflowMonth[] = window.months.map((m) => ({
@@ -308,6 +318,32 @@ export function computeCashflow(
         amount: inf.amount,
         invoiceDate: inf.date,
         receivedDate: inf.date,
+      });
+    }
+  }
+
+  // --- Commission outflow: payouts จากโครงการ/subscription ---
+  if (includeCommissions && commissions.length > 0) {
+    const fromISO = window.start.toISOString().split("T")[0];
+    const toISO = window.end.toISOString().split("T")[0];
+    // ฐานยอดขายโครงการ (ก่อน VAT) สำหรับคิดคอม — คำนวณครบทุกโปรเจกต์
+    const projectBaseById = new Map<string, number>();
+    for (const p of projects) {
+      projectBaseById.set(p.id, calculateProjectCosts(p, positions, overheads).priceBeforeTax);
+    }
+    const payouts = expandCommissionPayouts(
+      commissions, commissionPayees, projects, subscriptions, products, projectBaseById, fromISO, toISO
+    );
+    for (const po of payouts) {
+      const d = new Date(po.date + "T00:00:00Z");
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()).padStart(2, "0")}`;
+      const idx = monthIndex.get(key);
+      if (idx === undefined) continue;
+      months[idx].outflow += po.amount;
+      months[idx].outflowDetails.push({
+        category: "commission",
+        label: `ค่าคอม: ${po.payeeName} · ${po.label}`,
+        amount: po.amount,
       });
     }
   }

@@ -191,6 +191,49 @@ export interface Subscription {
   notes?: string;
 }
 
+// ====================================================
+// Commission — ค่าคอมมิชชั่นการขาย
+// ====================================================
+export type PayeeType = 'employee' | 'partner';
+
+export interface CommissionPayee {
+  id: string;
+  name: string;
+  type: PayeeType;
+  // ผูกกับ Employee เมื่อ type = 'employee' (optional)
+  employeeId?: string;
+  // เรตคอมตั้งต้น % — ใช้ prefill ตอนสร้างรายการคอม
+  defaultRatePercent?: number;
+  contactEmail?: string;
+  contactPhone?: string;
+  active: boolean;
+  notes?: string;
+}
+
+export type CommissionSourceType = 'project' | 'subscription';
+export type CommissionBasis = 'percent' | 'fixed';
+// one_time = จ่ายคอมครั้งเดียวตอนขาย, recurring = จ่ายทุกงวดที่ลูกค้าจ่าย
+export type SubscriptionCommissionMode = 'one_time' | 'recurring';
+export type CommissionStatus = 'pending' | 'paid' | 'cancelled';
+
+export interface Commission {
+  id: string;
+  payeeId: string;
+  sourceType: CommissionSourceType;
+  sourceId: string;              // projectId หรือ subscriptionId
+  basis: CommissionBasis;
+  ratePercent?: number;          // ใช้เมื่อ basis = 'percent'
+  fixedAmount?: number;          // ใช้เมื่อ basis = 'fixed'
+  // ใช้เมื่อ sourceType = 'subscription'
+  subscriptionMode?: SubscriptionCommissionMode;
+  // จำกัดจำนวนงวดที่จ่ายคอม (optional) — ใช้เมื่อ recurring
+  recurringMaxPayments?: number;
+  status: CommissionStatus;
+  // วันจ่ายคอม (สำหรับ one-time) — ใช้ลง cashflow
+  payoutDate?: string;
+  notes?: string;
+}
+
 export type ScenarioId = 'best' | 'realistic' | 'worst';
 
 export interface Scenario {
