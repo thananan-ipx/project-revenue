@@ -8,6 +8,7 @@ import {
   Download, Upload, Moon, Sun, Laptop, DollarSign,
   FolderKanban, CalendarRange, LogOut, User as UserIcon, Banknote,
   Repeat, Package, Building2, BarChart3, Receipt,
+  Percent, Handshake,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -25,8 +26,10 @@ export type SidebarViewId =
   | "company_analytics"
   | "cashflow"
   | "subscriptions"
+  | "commissions"
   | "master_products"
   | "master_customers"
+  | "master_commission_payees"
   | "master_positions"
   | "master_overheads"
   | "master_employees";
@@ -64,6 +67,7 @@ const NAV_SECTIONS: NavSection[] = [
     title: "รายรับ & การเงิน",
     items: [
       { id: "subscriptions", label: "รายรับประจำ", icon: Repeat },
+      { id: "commissions", label: "ค่าคอมมิชชั่น", icon: Percent },
       { id: "cashflow", label: "Cashflow", icon: Banknote },
       { id: "company_analytics", label: "Company Analytics", icon: BarChart3 },
     ],
@@ -73,6 +77,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "master_customers", label: "ลูกค้า", icon: Building2 },
       { id: "master_products", label: "สินค้า/แพ็กเกจ", icon: Package },
+      { id: "master_commission_payees", label: "ผู้รับคอม", icon: Handshake },
       { id: "master_positions", label: "ข้อมูลเรตตำแหน่งงาน", icon: Briefcase },
       { id: "master_employees", label: "รายชื่อพนักงาน", icon: Users },
       { id: "master_overheads", label: "ค่าใช้จ่ายส่วนกลาง", icon: Receipt },

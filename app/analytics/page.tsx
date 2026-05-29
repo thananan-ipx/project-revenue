@@ -11,6 +11,8 @@ export default function AnalyticsPage() {
     positions,
     overheads,
     subscriptions,
+    commissions,
+    commissionPayees,
   } = useAppState();
 
   return (
@@ -20,6 +22,8 @@ export default function AnalyticsPage() {
         positions={positions}
         overheads={overheads}
         subscriptions={subscriptions}
+        commissions={commissions}
+        commissionPayees={commissionPayees}
       />
     </AppLayout>
   );

@@ -14,6 +14,8 @@ const MULTI_ROW_TABLES: Record<string, string> = {
   cost_est_products: "products",
   cost_est_subscriptions: "subscriptions",
   cost_est_customers: "customers",
+  cost_est_commission_payees: "commission_payees",
+  cost_est_commissions: "commissions",
 };
 
 const SINGLETON_TABLES: Record<string, string> = {

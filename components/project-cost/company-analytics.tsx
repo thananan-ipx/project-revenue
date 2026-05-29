@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { Project, PositionRate, ProjectStatus, OverheadItem, Subscription } from "@/lib/types";
+import { Project, PositionRate, ProjectStatus, OverheadItem, Subscription, Commission, CommissionPayee } from "@/lib/types";
 import { summarizeRevenue } from "@/lib/subscriptions";
+import { estimateCommissionTotal, summarizeCommissions, ScoredCommission } from "@/lib/commissions";
 import {
   computeYearWindow,
   computeMonthlyCompanyLoad,
@@ -41,9 +42,18 @@ interface CompanyAnalyticsProps {
   positions: PositionRate[];
   overheads?: OverheadItem[];
   subscriptions?: Subscription[];
+  commissions?: Commission[];
+  commissionPayees?: CommissionPayee[];
 }
 
-export function CompanyAnalytics({ projects, positions, overheads = [], subscriptions = [] }: CompanyAnalyticsProps) {
+export function CompanyAnalytics({
+  projects,
+  positions,
+  overheads = [],
+  subscriptions = [],
+  commissions = [],
+  commissionPayees = [],
+}: CompanyAnalyticsProps) {
   const [selectedYearCE, setSelectedYearCE] = useState<number>(new Date().getUTCFullYear());
   const [statusFilter, setStatusFilter] = useState<"active" | "all">("active");
 
@@ -241,6 +251,29 @@ export function CompanyAnalytics({ projects, positions, overheads = [], subscrip
     return { revenue, laborCost, directCost, overhead, contingency, totalCost, profit, margin };
   }, [projects, projectCalcMap, excludedStatuses, yearWindow]);
 
+  // ---- Commission summary + leaderboard ----
+  const commissionData = useMemo(() => {
+    const projectBaseById = new Map(
+      projects.map((p) => [p.id, (projectCalcMap.get(p.id)?.priceBeforeTax) ?? 0])
+    );
+    const subById = new Map(subscriptions.map((s) => [s.id, s]));
+    const payeeName = new Map(commissionPayees.map((p) => [p.id, p.name]));
+    const scored: ScoredCommission[] = commissions.map((c) => {
+      const amount =
+        c.sourceType === "project"
+          ? estimateCommissionTotal(c, { projectBaseAmount: projectBaseById.get(c.sourceId) ?? 0 })
+          : estimateCommissionTotal(c, { subscription: subById.get(c.sourceId) });
+      return { payeeId: c.payeeId, status: c.status, amount };
+    });
+    const summary = summarizeCommissions(scored);
+    const leaderboard = summary.byPayee
+      .slice(0, 5)
+      .map((b) => ({ name: payeeName.get(b.payeeId) ?? "(ไม่พบผู้รับคอม)", total: b.total, count: b.count }));
+    return { summary, leaderboard };
+  }, [commissions, commissionPayees, projects, projectCalcMap, subscriptions]);
+
+  const profitAfterCommission = companyFinancials.profit - commissionData.summary.totalAll;
+
   const totalAdditionalHireCost = roleBreakdown.reduce((s, r) => s + r.additionalHireCost, 0);
   const totalAdditionalRevenueCapacity = roleBreakdown.reduce(
     (s, r) => s + r.additionalRevenueCapacity,
@@ -321,6 +354,78 @@ export function CompanyAnalytics({ projects, positions, overheads = [], subscrip
               </CardContent>
             </Card>
           </div>
+        </div>
+      )}
+
+      {/* Commission */}
+      {commissions.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Banknote className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-bold tracking-tight">ค่าคอมมิชชั่น</h3>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card className="border-border/50 bg-card/50">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">ค่าคอมรวม</CardDescription>
+                <CardTitle className="text-xl font-black text-primary font-mono">฿{fmtBaht(commissionData.summary.totalAll)}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">ค้างจ่าย + จ่ายแล้ว (ประเมินตลอดสัญญา)</p>
+              </CardContent>
+            </Card>
+            <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">ค้างจ่าย</CardDescription>
+                <CardTitle className="text-xl font-black text-amber-600 font-mono">฿{fmtBaht(commissionData.summary.totalPending)}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">{commissionData.summary.countPending} รายการ</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/50 bg-card/50">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">จ่ายแล้ว</CardDescription>
+                <CardTitle className="text-xl font-black text-emerald-600 font-mono">฿{fmtBaht(commissionData.summary.totalPaid)}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">{commissionData.summary.countPaid} รายการ</p>
+              </CardContent>
+            </Card>
+            <Card className={`border-border/50 ${profitAfterCommission < 0 ? "bg-rose-50/50 dark:bg-rose-950/20 border-rose-200" : "bg-card/50"}`}>
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">กำไรหลังหักคอม</CardDescription>
+                <CardTitle className={`text-xl font-black font-mono ${profitAfterCommission < 0 ? "text-rose-600" : "text-primary"}`}>
+                  ฿{fmtBaht(profitAfterCommission)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">กำไรโครงการ (ปีนี้) − ค่าคอมรวม</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {commissionData.leaderboard.length > 0 && (
+            <Card className="border-border/50 bg-card/50 mt-3">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">อันดับผู้รับคอม (Top 5)</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-1.5">
+                  {commissionData.leaderboard.map((r, i) => (
+                    <div key={r.name} className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="text-[11px] text-muted-foreground w-4 text-right">{i + 1}.</span>
+                        <span className="truncate font-medium">{r.name}</span>
+                        <span className="text-[10px] text-muted-foreground">({r.count})</span>
+                      </span>
+                      <span className="font-mono font-bold text-primary shrink-0">฿{fmtBaht(r.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
