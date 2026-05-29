@@ -1,6 +1,10 @@
-import { Project, PositionRate, OverheadItem, Employee } from "./types";
+import { Project, PositionRate, OverheadItem, Employee, Subscription, Product } from "./types";
 import { calculateProjectCosts } from "./calculations";
 import { getProjectDateRange, TimelineWindow, computeYearWindow } from "./resource-planning";
+import { expandSubscriptionInflows } from "./subscriptions";
+
+/** projectId สังเคราะห์สำหรับรวมรายรับประจำ (subscriptions) เป็น series เดียวในกราฟ */
+export const RECURRING_INFLOW_PROJECT_ID = "__recurring__";
 
 /** Fully-loaded monthly cost for one employee. */
 export function employeeMonthlyCost(emp: Employee): number {
@@ -66,6 +70,12 @@ export interface CashflowOptions {
   laborSource?: LaborCostSource;
   /** Employees on payroll — required when laborSource = "payroll" */
   employees?: Employee[];
+  /** รายการขายแบบรายรับซ้ำ (license/subscription) — เพิ่มเป็น inflow */
+  subscriptions?: Subscription[];
+  /** สินค้า/แพ็กเกจ — ใช้ระบุชื่อใน inflow detail ของ subscription */
+  products?: Product[];
+  /** รวมรายรับประจำเข้า inflow หรือไม่ (default true) */
+  includeSubscriptions?: boolean;
 }
 
 /**
@@ -96,6 +106,9 @@ export function computeCashflow(
   const openingBalance = options.openingBalance ?? 0;
   const laborSource: LaborCostSource = options.laborSource ?? "project-spread";
   const employees = options.employees ?? [];
+  const includeSubscriptions = options.includeSubscriptions ?? true;
+  const subscriptions = options.subscriptions ?? [];
+  const products = options.products ?? [];
 
   // Initialize months
   const months: CashflowMonth[] = window.months.map((m) => ({
@@ -274,6 +287,28 @@ export function computeCashflow(
           amount: v,
         });
       }
+    }
+  }
+
+  // --- Recurring revenue inflow: subscriptions / licenses ---
+  if (includeSubscriptions && subscriptions.length > 0) {
+    const fromISO = window.start.toISOString().split("T")[0];
+    const toISO = window.end.toISOString().split("T")[0];
+    const inflows = expandSubscriptionInflows(subscriptions, products, fromISO, toISO);
+    for (const inf of inflows) {
+      const d = new Date(inf.date + "T00:00:00Z");
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()).padStart(2, "0")}`;
+      const idx = monthIndex.get(key);
+      if (idx === undefined) continue;
+      months[idx].inflow += inf.amount;
+      months[idx].inflowDetails.push({
+        projectId: RECURRING_INFLOW_PROJECT_ID,
+        projectName: "รายรับประจำ (Subscriptions)",
+        installmentName: `${inf.customerName} · ${inf.productName}`,
+        amount: inf.amount,
+        invoiceDate: inf.date,
+        receivedDate: inf.date,
+      });
     }
   }
 

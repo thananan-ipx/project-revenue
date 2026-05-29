@@ -37,6 +37,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   else if (pathname.startsWith("/resource-planning")) activeView = "resource_planning";
   else if (pathname.startsWith("/analytics")) activeView = "company_analytics";
   else if (pathname.startsWith("/cashflow")) activeView = "cashflow";
+  else if (pathname.startsWith("/subscriptions")) activeView = "subscriptions";
+  else if (pathname.startsWith("/master-data/products")) activeView = "master_products";
+  else if (pathname.startsWith("/master-data/customers")) activeView = "master_customers";
   else if (pathname.startsWith("/master-data/positions")) activeView = "master_positions";
   else if (pathname.startsWith("/master-data/overheads")) activeView = "master_overheads";
   else if (pathname.startsWith("/master-data/employees")) activeView = "master_employees";
@@ -55,6 +58,9 @@ export function AppLayout({ children }: AppLayoutProps) {
       case "resource_planning": router.push("/resource-planning"); break;
       case "company_analytics": router.push("/analytics"); break;
       case "cashflow": router.push("/cashflow"); break;
+      case "subscriptions": router.push("/subscriptions"); break;
+      case "master_products": router.push("/master-data/products"); break;
+      case "master_customers": router.push("/master-data/customers"); break;
       case "master_positions": router.push("/master-data/positions"); break;
       case "master_overheads": router.push("/master-data/overheads"); break;
       case "master_employees": router.push("/master-data/employees"); break;

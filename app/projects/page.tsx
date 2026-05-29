@@ -11,10 +11,12 @@ export default function ProjectsPage() {
     projects,
     positions,
     overheads,
+    customers,
     addProject,
     updateProject,
     deleteProject,
     duplicateProject,
+    addCustomer,
     setActiveProjectId,
   } = useAppState();
   
@@ -26,6 +28,7 @@ export default function ProjectsPage() {
         projects={projects}
         positions={positions}
         overheads={overheads}
+        customers={customers}
         onSelectProject={(id) => {
           setActiveProjectId(id);
           router.push(`/projects/${id}`);
@@ -34,6 +37,7 @@ export default function ProjectsPage() {
         onUpdateProject={updateProject}
         onDeleteProject={deleteProject}
         onDuplicateProject={duplicateProject}
+        onAddCustomer={addCustomer}
       />
     </AppLayout>
   );

@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Project, ProjectStatus, PositionRate, OverheadItem } from "@/lib/types";
+import { Project, ProjectStatus, PositionRate, OverheadItem, Customer } from "@/lib/types";
 import { calculateProjectCosts } from "@/lib/calculations";
+import { toClientInfo } from "@/lib/customers";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,12 +26,16 @@ interface ProjectsListViewProps {
   projects: Project[];
   positions: PositionRate[];
   overheads: OverheadItem[];
+  customers: Customer[];
   onSelectProject: (id: string) => void;
-  onAddProject: (name: string, description?: string) => void;
+  onAddProject: (name: string, description?: string, patch?: Partial<Project>) => void;
   onUpdateProject: (updated: Project) => void;
   onDeleteProject: (id: string) => void;
   onDuplicateProject: (id: string) => void;
+  onAddCustomer: (item: Omit<Customer, "id">) => Customer;
 }
+
+const NEW_CUSTOMER = "_new";
 
 type SortKey = "name" | "createdAt" | "quotationDate" | "finalPrice" | "status";
 type SortDir = "asc" | "desc";
@@ -48,11 +53,13 @@ export function ProjectsListView({
   projects,
   positions,
   overheads,
+  customers,
   onSelectProject,
   onAddProject,
   onUpdateProject,
   onDeleteProject,
   onDuplicateProject,
+  onAddCustomer,
 }: ProjectsListViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
@@ -66,11 +73,15 @@ export function ProjectsListView({
   // Create form state
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newCustomerSel, setNewCustomerSel] = useState<string>(NEW_CUSTOMER);
+  const [newCustomerName, setNewCustomerName] = useState("");
 
   // Edit form state
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
-  const [editClient, setEditClient] = useState("");
+  // customer selection: a master id, or NEW_CUSTOMER (สร้าง/กรอกใหม่)
+  const [editCustomerSel, setEditCustomerSel] = useState<string>(NEW_CUSTOMER);
+  const [editNewCustomerName, setEditNewCustomerName] = useState("");
   const [editStatus, setEditStatus] = useState<ProjectStatus>("draft");
   const [editQuotationDate, setEditQuotationDate] = useState("");
 
@@ -152,12 +163,30 @@ export function ProjectsListView({
     .reduce((s, e) => s + e.finalPrice, 0);
 
   // ---- Actions ----
+  // แปลงค่าที่เลือกใน picker → ลูกค้าใน master (สร้างใหม่ถ้าจำเป็น, กันชื่อซ้ำ)
+  const resolveSelectedCustomer = (sel: string, typedName: string): Customer | null => {
+    if (sel !== NEW_CUSTOMER) {
+      return customers.find((c) => c.id === sel) ?? null;
+    }
+    const name = typedName.trim();
+    if (!name) return null;
+    const dup = customers.find((c) => c.name.trim().toLowerCase() === name.toLowerCase());
+    return dup ?? onAddCustomer({ name, active: true });
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    onAddProject(newName.trim(), newDesc.trim() || undefined);
+    const linked = resolveSelectedCustomer(newCustomerSel, newCustomerName);
+    onAddProject(
+      newName.trim(),
+      newDesc.trim() || undefined,
+      linked ? { customerId: linked.id, client: toClientInfo(linked) } : undefined
+    );
     setNewName("");
     setNewDesc("");
+    setNewCustomerSel(NEW_CUSTOMER);
+    setNewCustomerName("");
     setIsCreateOpen(false);
     toast.success("สร้างโครงการใหม่สำเร็จ");
   };
@@ -166,7 +195,14 @@ export function ProjectsListView({
     setEditing(p);
     setEditName(p.name);
     setEditDesc(p.description ?? "");
-    setEditClient(p.client?.name ?? "");
+    // ถ้าโปรเจกต์ผูก master อยู่แล้ว → เลือกอันนั้น; ถ้ายัง → โหมดสร้าง/กรอกใหม่ (prefill ชื่อเดิม)
+    if (p.customerId && customers.some((c) => c.id === p.customerId)) {
+      setEditCustomerSel(p.customerId);
+      setEditNewCustomerName("");
+    } else {
+      setEditCustomerSel(NEW_CUSTOMER);
+      setEditNewCustomerName(p.client?.name ?? "");
+    }
     setEditStatus(p.status);
     setEditQuotationDate(p.quotationDate || p.createdAt.split("T")[0]);
     setIsEditOpen(true);
@@ -175,11 +211,16 @@ export function ProjectsListView({
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing || !editName.trim()) return;
+
+    // หาว่าจะผูกกับลูกค้าใน master รายใด
+    const linked = resolveSelectedCustomer(editCustomerSel, editNewCustomerName);
+
     onUpdateProject({
       ...editing,
       name: editName.trim(),
       description: editDesc.trim() || undefined,
-      client: { ...(editing.client ?? { name: "" }), name: editClient.trim() },
+      customerId: linked ? linked.id : undefined,
+      client: linked ? toClientInfo(linked) : { ...(editing.client ?? { name: "" }), name: "" },
       status: editStatus,
       quotationDate: editQuotationDate || editing.quotationDate,
     });
@@ -270,6 +311,43 @@ export function ProjectsListView({
                     rows={3}
                   />
                 </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="new-proj-client">ลูกค้า (optional)</Label>
+                  {customers.length > 0 ? (
+                    <Select value={newCustomerSel} onValueChange={setNewCustomerSel}>
+                      <SelectTrigger id="new-proj-client">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customers.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                        <SelectItem value={NEW_CUSTOMER}>➕ สร้างบริษัทใหม่…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="new-proj-client"
+                      placeholder="บริษัท ลูกค้า จำกัด — เว้นว่างได้"
+                      value={newCustomerName}
+                      onChange={(e) => setNewCustomerName(e.target.value)}
+                    />
+                  )}
+                </div>
+                {customers.length > 0 && newCustomerSel === NEW_CUSTOMER && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="new-proj-new-client">ชื่อบริษัทใหม่</Label>
+                    <Input
+                      id="new-proj-new-client"
+                      placeholder="บริษัท ลูกค้า จำกัด — เว้นว่าง = ไม่ระบุลูกค้า"
+                      value={newCustomerName}
+                      onChange={(e) => setNewCustomerName(e.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      จะถูกเพิ่มเข้าฐานข้อมูลลูกค้า (master) อัตโนมัติ แล้วผูกกับโปรเจกต์นี้
+                    </p>
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button type="submit">สร้างโครงการ</Button>
@@ -543,13 +621,27 @@ export function ProjectsListView({
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="ed-client">ชื่อลูกค้า</Label>
-                    <Input
-                      id="ed-client"
-                      placeholder="บริษัท ลูกค้า จำกัด"
-                      value={editClient}
-                      onChange={(e) => setEditClient(e.target.value)}
-                    />
+                    <Label htmlFor="ed-client">ลูกค้า</Label>
+                    {customers.length > 0 ? (
+                      <Select value={editCustomerSel} onValueChange={setEditCustomerSel}>
+                        <SelectTrigger id="ed-client">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {customers.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                          <SelectItem value={NEW_CUSTOMER}>➕ สร้างบริษัทใหม่…</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        id="ed-client"
+                        placeholder="บริษัท ลูกค้า จำกัด"
+                        value={editNewCustomerName}
+                        onChange={(e) => setEditNewCustomerName(e.target.value)}
+                      />
+                    )}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="ed-status">สถานะ</Label>
@@ -565,6 +657,22 @@ export function ProjectsListView({
                     </Select>
                   </div>
                 </div>
+
+                {/* เมื่อมี master แต่เลือก "สร้างบริษัทใหม่" → ให้กรอกชื่อบริษัทใหม่ */}
+                {customers.length > 0 && editCustomerSel === NEW_CUSTOMER && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="ed-new-client">ชื่อบริษัทใหม่</Label>
+                    <Input
+                      id="ed-new-client"
+                      placeholder="บริษัท ลูกค้า จำกัด — เว้นว่าง = ไม่ระบุลูกค้า"
+                      value={editNewCustomerName}
+                      onChange={(e) => setEditNewCustomerName(e.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      จะถูกเพิ่มเข้าฐานข้อมูลลูกค้า (master) อัตโนมัติ แล้วผูกกับโปรเจกต์นี้
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-2">
                   <Label htmlFor="ed-qdate" className="flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5" /> วันที่ออกใบเสนอราคา

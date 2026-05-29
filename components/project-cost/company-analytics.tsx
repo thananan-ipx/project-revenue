@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { Project, PositionRate, ProjectStatus, OverheadItem } from "@/lib/types";
+import { Project, PositionRate, ProjectStatus, OverheadItem, Subscription } from "@/lib/types";
+import { summarizeRevenue } from "@/lib/subscriptions";
 import {
   computeYearWindow,
   computeMonthlyCompanyLoad,
@@ -39,9 +40,10 @@ interface CompanyAnalyticsProps {
   projects: Project[];
   positions: PositionRate[];
   overheads?: OverheadItem[];
+  subscriptions?: Subscription[];
 }
 
-export function CompanyAnalytics({ projects, positions, overheads = [] }: CompanyAnalyticsProps) {
+export function CompanyAnalytics({ projects, positions, overheads = [], subscriptions = [] }: CompanyAnalyticsProps) {
   const [selectedYearCE, setSelectedYearCE] = useState<number>(new Date().getUTCFullYear());
   const [statusFilter, setStatusFilter] = useState<"active" | "all">("active");
 
@@ -76,6 +78,11 @@ export function CompanyAnalytics({ projects, positions, overheads = [] }: Compan
     : 0;
   const criticalMonths = monthlyData.filter((d) => d.utilization > 100).length;
   const hasAnyData = monthlyData.some((d) => d.load > 0 || d.capacity > 0);
+
+  // ---- Recurring revenue summary (subscriptions / licenses) ----
+  const revenueSummary = useMemo(() => summarizeRevenue(subscriptions), [subscriptions]);
+  const fmtBaht = (v: number) =>
+    new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(v);
 
   // ---- Per-role breakdown (workload + financial) ----
   // Allocates project revenue & cost to each role proportionally:
@@ -264,6 +271,58 @@ export function CompanyAnalytics({ projects, positions, overheads = [] }: Compan
           วิเคราะห์โหลดงานรวมของทั้งบริษัท เทียบกับขีดความสามารถ (Capacity) รายเดือน
         </p>
       </div>
+
+      {/* Recurring Revenue (Subscriptions) */}
+      {subscriptions.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Banknote className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-bold tracking-tight">รายรับประจำ (Recurring Revenue)</h3>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card className="border-border/50 bg-card/50">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">MRR</CardDescription>
+                <CardTitle className="text-xl font-black text-primary font-mono">฿{fmtBaht(revenueSummary.mrr)}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">รายได้ต่อเนื่องต่อเดือน</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/50 bg-card/50">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">ARR</CardDescription>
+                <CardTitle className="text-xl font-black text-emerald-600 font-mono">฿{fmtBaht(revenueSummary.arr)}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">รายได้ต่อเนื่องต่อปี (MRR × 12)</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/50 bg-card/50">
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">ลูกค้าที่ใช้งาน</CardDescription>
+                <CardTitle className="text-2xl font-black">{revenueSummary.activeCount}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">
+                  subscription {revenueSummary.recurringCount} · license {revenueSummary.activeLicenseCount}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className={`border-border/50 ${revenueSummary.expiringSoonCount > 0 ? "bg-amber-50/50 dark:bg-amber-950/20 border-amber-200" : "bg-card/50"}`}>
+              <CardHeader className="pb-2">
+                <CardDescription className="text-[11px] uppercase tracking-wider font-bold">ใกล้หมดอายุ</CardDescription>
+                <CardTitle className={`text-2xl font-black ${revenueSummary.expiringSoonCount > 0 ? "text-amber-600" : ""}`}>
+                  {revenueSummary.expiringSoonCount}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-[10px] text-muted-foreground">ภายใน 30 วัน · หมดอายุแล้ว {revenueSummary.expiredCount}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

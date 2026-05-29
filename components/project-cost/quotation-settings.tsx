@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { Project, CompanyInfo } from "@/lib/types";
+import { Project, CompanyInfo, Customer } from "@/lib/types";
+import { toClientInfo } from "@/lib/customers";
 import { CompanyInfoSection } from "./quotation-settings/company-info-section";
 import { ClientInfoSection } from "./quotation-settings/client-info-section";
 import { QuotationMetaSection } from "./quotation-settings/quotation-meta-section";
@@ -11,6 +12,7 @@ import { PhasesSection } from "./quotation-settings/phases-section";
 interface QuotationSettingsProps {
   project: Project;
   companyInfo: CompanyInfo;
+  customers?: Customer[];
   onUpdateProject: (updated: Project) => void;
   onUpdateCompanyInfo: (info: CompanyInfo) => void;
 }
@@ -18,6 +20,7 @@ interface QuotationSettingsProps {
 export function QuotationSettings({
   project,
   companyInfo,
+  customers = [],
   onUpdateProject,
   onUpdateCompanyInfo,
 }: QuotationSettingsProps) {
@@ -42,8 +45,17 @@ export function QuotationSettings({
 
       <ClientInfoSection
         client={project.client}
+        customers={customers}
+        customerId={project.customerId}
         onUpdate={(patch) =>
           onUpdateProject({ ...project, client: { ...project.client, ...patch } })
+        }
+        onSelectCustomer={(customer) =>
+          onUpdateProject(
+            customer
+              ? { ...project, customerId: customer.id, client: toClientInfo(customer) }
+              : { ...project, customerId: undefined }
+          )
         }
       />
 

@@ -5,17 +5,22 @@ import { useProjects } from "@/hooks/use-projects";
 import { usePositions } from "@/hooks/use-positions";
 import { useOverheads } from "@/hooks/use-overheads";
 import { useEmployees } from "@/hooks/use-employees";
+import { useProducts } from "@/hooks/use-products";
+import { useSubscriptions } from "@/hooks/use-subscriptions";
+import { useCustomers } from "@/hooks/use-customers";
 import { useCashflowSettings, CashflowSettings } from "@/hooks/use-cashflow-settings";
 import { useCompanyInfo, DEFAULT_COMPANY_INFO } from "@/hooks/use-company-info";
 import { useActiveProject } from "@/hooks/use-active-project";
 import {
   ProjectSchema, PositionRateSchema, OverheadItemSchema, EmployeeSchema, CompanyInfoSchema,
+  ProductSchema, SubscriptionSchema, CustomerSchema,
   safeParse, safeParseArray,
 } from "@/lib/schemas";
 import {
   migrateProjectChain, migratePositionChain, migrateOverheadChain,
 } from "@/lib/migrations";
-import { Project, PositionRate, OverheadItem, Employee, CompanyInfo } from "@/lib/types";
+import { Project, PositionRate, OverheadItem, Employee, CompanyInfo, Product, Subscription, Customer } from "@/lib/types";
+import { extractCustomersFromRecords, toSubscriptionCustomer, toClientInfo } from "@/lib/customers";
 
 interface AppStateContextType {
   isLoaded: boolean;
@@ -28,7 +33,7 @@ interface AppStateContextType {
   activeProject: Project | undefined;
   setActiveProjectId: (id: string) => void;
   // Project CRUD
-  addProject: (name: string, description?: string) => void;
+  addProject: (name: string, description?: string, patch?: Partial<Project>) => Project;
   updateProject: (updated: Project) => void;
   deleteProject: (id: string) => void;
   duplicateProject: (id: string) => void;
@@ -45,6 +50,23 @@ interface AppStateContextType {
   addEmployee: (item: Omit<Employee, "id">) => void;
   updateEmployee: (updated: Employee) => void;
   deleteEmployee: (id: string) => void;
+  // Product CRUD (recurring revenue master data)
+  products: Product[];
+  addProduct: (item: Omit<Product, "id">) => void;
+  updateProduct: (updated: Product) => void;
+  deleteProduct: (id: string) => void;
+  // Subscription CRUD (recurring revenue sales)
+  subscriptions: Subscription[];
+  addSubscription: (item: Omit<Subscription, "id">) => void;
+  updateSubscription: (updated: Subscription) => void;
+  deleteSubscription: (id: string) => void;
+  // Customer CRUD (master data)
+  customers: Customer[];
+  addCustomer: (item: Omit<Customer, "id">) => Customer;
+  updateCustomer: (updated: Customer) => void;
+  deleteCustomer: (id: string) => void;
+  /** ดึงลูกค้าที่ฝังอยู่ใน subscription/project (ที่ยังไม่ผูก) ออกมาเป็น master + ผูก customerId — คืนจำนวนลูกค้าใหม่ */
+  importCustomersFromExisting: () => number;
   // Cashflow settings (anchor for balance carryover)
   cashflowSettings: CashflowSettings;
   setCashflowSettings: (s: CashflowSettings) => void;
@@ -76,6 +98,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const employeesApi = useEmployees();
   const { employees, replaceAllEmployees } = employeesApi;
 
+  const productsApi = useProducts();
+  const { products, replaceAllProducts } = productsApi;
+
+  const subscriptionsApi = useSubscriptions();
+  const { subscriptions, replaceAllSubscriptions } = subscriptionsApi;
+
+  const customersApi = useCustomers();
+  const { customers, replaceAllCustomers } = customersApi;
+
   const { cashflowSettings, setCashflowSettings, hydrated: cashflowHydrated } = useCashflowSettings();
 
   const { companyInfo, setCompanyInfo, hydrated: companyHydrated } = useCompanyInfo();
@@ -87,11 +118,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // Cross-cutting actions
   const addProject = useCallback(
-    (name: string, description?: string) => {
+    (name: string, description?: string, patch?: Partial<Project>): Project => {
       const newProject = addProjectRaw(name, description);
+      const finalProject = patch ? { ...newProject, ...patch } : newProject;
+      if (patch) updateProject(finalProject);
       setActiveProjectId(newProject.id);
+      return finalProject;
     },
-    [addProjectRaw, setActiveProjectId]
+    [addProjectRaw, updateProject, setActiveProjectId]
   );
 
   const deleteProject = useCallback(
@@ -121,15 +155,86 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [deletePositionRaw, cleanupPositionReferences]
   );
 
+  // แก้ลูกค้าใน master → cascade อัปเดต snapshot ของทุกรายการที่ผูกไว้
+  // (ทำให้แก้ที่เดียวสะท้อนทุกหน้า โดยโค้ดแสดงผลเดิมไม่ต้องเปลี่ยน)
+  const updateCustomer = useCallback(
+    (updated: Customer) => {
+      customersApi.updateCustomer(updated);
+      for (const s of subscriptions) {
+        if (s.customerId === updated.id) {
+          subscriptionsApi.updateSubscription({ ...s, customer: toSubscriptionCustomer(updated) });
+        }
+      }
+      for (const p of projects) {
+        if (p.customerId === updated.id) {
+          updateProject({ ...p, client: toClientInfo(updated) });
+        }
+      }
+    },
+    [customersApi, subscriptions, subscriptionsApi, projects, updateProject]
+  );
+
+  // ลบลูกค้าใน master → ปลดการเชื่อม (customerId) ของรายการที่ผูกไว้
+  // โดยคง snapshot เดิมไว้ (รายการเก่ายังแสดงข้อมูลลูกค้าได้)
+  const deleteCustomer = useCallback(
+    (id: string) => {
+      customersApi.deleteCustomer(id);
+      for (const s of subscriptions) {
+        if (s.customerId === id) {
+          subscriptionsApi.updateSubscription({ ...s, customerId: undefined });
+        }
+      }
+      for (const p of projects) {
+        if (p.customerId === id) {
+          updateProject({ ...p, customerId: undefined });
+        }
+      }
+    },
+    [customersApi, subscriptions, subscriptionsApi, projects, updateProject]
+  );
+
+  const importCustomersFromExisting = useCallback((): number => {
+    const baseId = Date.now();
+    const result = extractCustomersFromRecords(
+      subscriptions,
+      projects,
+      customers,
+      (i) => `cust_${baseId}_${i}`
+    );
+    if (
+      result.newCustomers.length === 0 &&
+      result.subscriptionLinks.length === 0 &&
+      result.projectLinks.length === 0
+    ) {
+      return 0;
+    }
+    // 1. เพิ่มลูกค้าใหม่เข้า master (รักษา id ที่ gen ไว้)
+    if (result.newCustomers.length > 0) {
+      replaceAllCustomers([...customers, ...result.newCustomers]);
+    }
+    // 2. ผูก customerId กลับไปยัง subscription / project
+    const subLink = new Map(result.subscriptionLinks.map((l) => [l.subscriptionId, l.customerId]));
+    const projLink = new Map(result.projectLinks.map((l) => [l.projectId, l.customerId]));
+    for (const sub of subscriptions) {
+      const cid = subLink.get(sub.id);
+      if (cid) subscriptionsApi.updateSubscription({ ...sub, customerId: cid });
+    }
+    for (const proj of projects) {
+      const cid = projLink.get(proj.id);
+      if (cid) updateProject({ ...proj, customerId: cid });
+    }
+    return result.newCustomers.length;
+  }, [subscriptions, projects, customers, replaceAllCustomers, subscriptionsApi, updateProject]);
+
   const exportData = useCallback(() => {
-    const dataStr = JSON.stringify({ projects, positions, overheads, employees, companyInfo, cashflowSettings });
+    const dataStr = JSON.stringify({ projects, positions, overheads, employees, products, subscriptions, customers, companyInfo, cashflowSettings });
     const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
     const filename = `software_cost_estimation_backup_${new Date().toISOString().split("T")[0]}.json`;
     const link = document.createElement("a");
     link.setAttribute("href", dataUri);
     link.setAttribute("download", filename);
     link.click();
-  }, [projects, positions, overheads, employees, companyInfo, cashflowSettings]);
+  }, [projects, positions, overheads, employees, products, subscriptions, customers, companyInfo, cashflowSettings]);
 
   const importData = useCallback(
     (jsonDataStr: string): boolean => {
@@ -158,6 +263,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (Array.isArray(parsed.employees)) {
           replaceAllEmployees(safeParseArray(EmployeeSchema, parsed.employees, "import.employees"));
         }
+        if (Array.isArray(parsed.products)) {
+          replaceAllProducts(safeParseArray(ProductSchema, parsed.products, "import.products"));
+        }
+        if (Array.isArray(parsed.subscriptions)) {
+          replaceAllSubscriptions(safeParseArray(SubscriptionSchema, parsed.subscriptions, "import.subscriptions"));
+        }
+        if (Array.isArray(parsed.customers)) {
+          replaceAllCustomers(safeParseArray(CustomerSchema, parsed.customers, "import.customers"));
+        }
         if (parsed.companyInfo) {
           setCompanyInfo(
             safeParse(CompanyInfoSchema, parsed.companyInfo, DEFAULT_COMPANY_INFO, "import.companyInfo")
@@ -172,10 +286,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    [replaceAllProjects, replaceAllPositions, replaceAllOverheads, replaceAllEmployees, setCompanyInfo, setActiveProjectId]
+    [replaceAllProjects, replaceAllPositions, replaceAllOverheads, replaceAllEmployees, replaceAllProducts, replaceAllSubscriptions, replaceAllCustomers, setCompanyInfo, setActiveProjectId]
   );
 
-  const isLoaded = projectsHydrated && companyHydrated && positionsApi.hydrated && overheadsApi.hydrated && employeesApi.hydrated && cashflowHydrated;
+  const isLoaded = projectsHydrated && companyHydrated && positionsApi.hydrated && overheadsApi.hydrated && employeesApi.hydrated && productsApi.hydrated && subscriptionsApi.hydrated && customersApi.hydrated && cashflowHydrated;
 
   const value = useMemo(() => ({
     isLoaded,
@@ -201,6 +315,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     addEmployee: employeesApi.addEmployee,
     updateEmployee: employeesApi.updateEmployee,
     deleteEmployee: employeesApi.deleteEmployee,
+    products,
+    addProduct: productsApi.addProduct,
+    updateProduct: productsApi.updateProduct,
+    deleteProduct: productsApi.deleteProduct,
+    subscriptions,
+    addSubscription: subscriptionsApi.addSubscription,
+    updateSubscription: subscriptionsApi.updateSubscription,
+    deleteSubscription: subscriptionsApi.deleteSubscription,
+    customers,
+    addCustomer: customersApi.addCustomer,
+    updateCustomer,
+    deleteCustomer,
+    importCustomersFromExisting,
     cashflowSettings,
     setCashflowSettings,
     exportData,
@@ -211,7 +338,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     deleteProject, duplicateProject, positionsApi.addPosition, positionsApi.updatePosition,
     deletePosition, overheadsApi.addOverhead, overheadsApi.updateOverhead,
     overheadsApi.deleteOverhead, employeesApi.addEmployee, employeesApi.updateEmployee,
-    employeesApi.deleteEmployee, cashflowSettings, setCashflowSettings, exportData, importData
+    employeesApi.deleteEmployee, products, productsApi.addProduct, productsApi.updateProduct,
+    productsApi.deleteProduct, subscriptions, subscriptionsApi.addSubscription,
+    subscriptionsApi.updateSubscription, subscriptionsApi.deleteSubscription,
+    customers, customersApi.addCustomer, updateCustomer,
+    deleteCustomer, importCustomersFromExisting,
+    cashflowSettings, setCashflowSettings, exportData, importData
   ]);
 
   return (
