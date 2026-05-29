@@ -9,6 +9,8 @@ export default function AnalyticsPage() {
   const {
     projects,
     positions,
+    overheads,
+    subscriptions,
   } = useAppState();
 
   return (
@@ -16,6 +18,8 @@ export default function AnalyticsPage() {
       <CompanyAnalytics
         projects={projects}
         positions={positions}
+        overheads={overheads}
+        subscriptions={subscriptions}
       />
     </AppLayout>
   );

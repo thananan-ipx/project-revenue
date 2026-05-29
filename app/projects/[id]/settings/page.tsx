@@ -7,7 +7,7 @@ import { QuotationSettings } from "@/components/project-cost/quotation-settings"
 
 export default function ProjectSettingsPage() {
   const { id } = useParams();
-  const { projects, companyInfo, setCompanyInfo, updateProject } = useAppState();
+  const { projects, companyInfo, customers, setCompanyInfo, updateProject } = useAppState();
 
   const project = useMemo(() => projects.find((p) => p.id === id), [projects, id]);
 
@@ -18,6 +18,7 @@ export default function ProjectSettingsPage() {
       key={project.id}
       project={project}
       companyInfo={companyInfo}
+      customers={customers}
       onUpdateProject={updateProject}
       onUpdateCompanyInfo={setCompanyInfo}
     />

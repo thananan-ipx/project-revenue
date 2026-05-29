@@ -117,6 +117,80 @@ export interface ProjectPhase {
   deliverables: string[];
 }
 
+// ====================================================
+// Customer (Master Data)
+// ข้อมูลลูกค้ากลาง — เก็บครั้งเดียว แล้วให้ Subscription / Project อ้างอิงด้วย customerId
+// ====================================================
+export interface Customer {
+  id: string;
+  name: string;
+  taxId?: string;           // เลขผู้เสียภาษี 13 หลัก
+  address?: string;
+  contactPerson?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  active: boolean;          // ยังใช้งานอยู่/เลิกใช้
+  notes?: string;
+  tags?: string[];          // ป้ายกำกับสำหรับจัดกลุ่ม
+}
+
+// ====================================================
+// Recurring Revenue — Products & Subscriptions
+// (สำหรับการขายระบบซ้ำ เช่น white-label CRM ให้สำนักงานบัญชี)
+// ====================================================
+
+// license = จ่ายก้อนเดียว ใช้ได้ถึงวันหมดอายุ (เช่น ขายเป็นรายปี)
+// subscription = เก็บเงินเป็นรอบต่อเนื่อง (รายเดือน/รายปี)
+export type ProductBillingType = 'license' | 'subscription';
+export type BillingCycle = 'monthly' | 'yearly';
+
+export interface Product {
+  id: string;
+  name: string;              // เช่น "CRM สำนักงานบัญชี – Pro"
+  description?: string;
+  billingType: ProductBillingType;
+  // ใช้เมื่อ billingType = 'subscription' — รอบการเก็บเงิน
+  billingCycle?: BillingCycle;
+  // ใช้เมื่อ billingType = 'license' — อายุ license เริ่มต้น (เดือน) เช่น 12
+  defaultTermMonths?: number;
+  // ราคาตั้งต้น (ก่อน VAT) — ต่อรอบ (subscription) หรือต่อ license (license)
+  defaultPrice: number;
+  active: boolean;
+  notes?: string;
+}
+
+export type SubscriptionStatus = 'active' | 'expired' | 'cancelled' | 'trial';
+
+// ข้อมูลลูกค้าของ subscription — โครงเดียวกับ ClientInfo แต่แยกไว้เพื่ออิสระ
+export interface SubscriptionCustomer {
+  name: string;
+  taxId?: string;
+  contactPerson?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+}
+
+export interface Subscription {
+  id: string;
+  productId: string;             // ผูกกับ Product
+  // อ้างอิง Customer master (optional) — ถ้าเว้นว่างใช้ snapshot ใน customer
+  customerId?: string;
+  customer: SubscriptionCustomer; // snapshot ข้อมูลลูกค้า ณ ตอนขาย
+  // snapshot จาก product ตอนขาย (override ได้รายราย)
+  billingType: ProductBillingType;
+  billingCycle?: BillingCycle;   // ใช้เมื่อ billingType = 'subscription'
+  startDate: string;             // ISO yyyy-mm-dd — วันซื้อ/เริ่มใช้งาน
+  endDate: string;               // ISO yyyy-mm-dd — วันหมดอายุ
+  // ราคาที่ขายจริง (ก่อน VAT) ต่อรอบ (subscription) หรือต่องวด license
+  amount: number;
+  seats?: number;                // จำนวน user/license (optional)
+  status: SubscriptionStatus;
+  autoRenew: boolean;            // ต่ออายุอัตโนมัติหรือไม่
+  // วันที่รับเงินจริง (ใช้ลง cashflow) — ถ้าเว้นว่างใช้ startDate
+  paymentReceivedDate?: string;
+  notes?: string;
+}
+
 export type ScenarioId = 'best' | 'realistic' | 'worst';
 
 export interface Scenario {
@@ -162,7 +236,9 @@ export interface Project {
   taxRate: number;
   withholdingTaxPercent: number;
   status: ProjectStatus;
-  // ข้อมูลลูกค้า (เปลี่ยนจาก clientName เป็น object เต็ม)
+  // อ้างอิง Customer master (optional) — ถ้าเว้นว่างใช้ snapshot ใน client
+  customerId?: string;
+  // ข้อมูลลูกค้า (snapshot — เปลี่ยนจาก clientName เป็น object เต็ม)
   client: ClientInfo;
   // เงื่อนไขการชำระเงิน
   paymentTerms: PaymentTerms;

@@ -46,6 +46,72 @@ export const EmployeeSchema = z.object({
 export type EmployeeInput = z.infer<typeof EmployeeSchema>;
 
 // ====================================================
+// Customer (Master Data)
+// ====================================================
+export const CustomerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  taxId: z.string().optional(),
+  address: z.string().optional(),
+  contactPerson: z.string().optional(),
+  contactEmail: z.string().optional(),
+  contactPhone: z.string().optional(),
+  active: z.boolean(),
+  notes: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+export type CustomerInput = z.infer<typeof CustomerSchema>;
+
+// ====================================================
+// Recurring Revenue — Products & Subscriptions
+// ====================================================
+export const ProductBillingTypeSchema = z.enum(["license", "subscription"]);
+export const BillingCycleSchema = z.enum(["monthly", "yearly"]);
+
+export const ProductSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  billingType: ProductBillingTypeSchema,
+  billingCycle: BillingCycleSchema.optional(),
+  defaultTermMonths: z.number().int().min(1).optional(),
+  defaultPrice: z.number().min(0),
+  active: z.boolean(),
+  notes: z.string().optional(),
+});
+export type ProductInput = z.infer<typeof ProductSchema>;
+
+export const SubscriptionStatusSchema = z.enum([
+  "active", "expired", "cancelled", "trial",
+]);
+
+export const SubscriptionCustomerSchema = z.object({
+  name: z.string(),
+  taxId: z.string().optional(),
+  contactPerson: z.string().optional(),
+  contactEmail: z.string().optional(),
+  contactPhone: z.string().optional(),
+});
+
+export const SubscriptionSchema = z.object({
+  id: z.string(),
+  productId: z.string(),
+  customerId: z.string().optional(),
+  customer: SubscriptionCustomerSchema,
+  billingType: ProductBillingTypeSchema,
+  billingCycle: BillingCycleSchema.optional(),
+  startDate: z.string(),
+  endDate: z.string(),
+  amount: z.number().min(0),
+  seats: z.number().int().min(0).optional(),
+  status: SubscriptionStatusSchema,
+  autoRenew: z.boolean(),
+  paymentReceivedDate: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type SubscriptionInput = z.infer<typeof SubscriptionSchema>;
+
+// ====================================================
 // Project sub-types
 // ====================================================
 export const ProjectPositionAllocationSchema = z.object({
@@ -151,6 +217,7 @@ export const ProjectSchema = z.object({
   taxRate: z.number().min(0).max(50),
   withholdingTaxPercent: z.number().min(0).max(50),
   status: ProjectStatusSchema,
+  customerId: z.string().optional(),
   client: ClientInfoSchema,
   paymentTerms: PaymentTermsSchema,
   phases: z.array(ProjectPhaseSchema),
