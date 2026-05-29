@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { Project, PositionRate, OverheadItem, Employee } from "@/lib/types";
+import { Project, PositionRate, OverheadItem, Employee, Subscription, Product } from "@/lib/types";
 import {
   computeYearWindow,
   toBuddhistYear,
@@ -65,6 +65,8 @@ interface CashflowViewProps {
   positions: PositionRate[];
   overheads: OverheadItem[];
   employees?: Employee[];
+  subscriptions?: Subscription[];
+  products?: Product[];
   cashflowSettings: CashflowSettings;
   onUpdateCashflowSettings: (s: CashflowSettings) => void;
 }
@@ -74,6 +76,8 @@ export function CashflowView({
   positions,
   overheads,
   employees = [],
+  subscriptions = [],
+  products = [],
   cashflowSettings,
   onUpdateCashflowSettings,
 }: CashflowViewProps) {
@@ -138,6 +142,8 @@ export function CashflowView({
           excludeStatuses: statusFilter === "active" ? ["lost"] : [],
           laborSource,
           employees,
+          subscriptions,
+          products,
         }
       ),
     [
@@ -150,6 +156,8 @@ export function CashflowView({
       statusFilter,
       laborSource,
       employees,
+      subscriptions,
+      products,
     ]
   );
 
@@ -162,8 +170,10 @@ export function CashflowView({
         openingBalance: effectiveOpeningBalance,
         laborSource,
         employees,
+        subscriptions,
+        products,
       }),
-    [projects, positions, overheads, yearWindow, statusFilter, effectiveOpeningBalance, laborSource, employees]
+    [projects, positions, overheads, yearWindow, statusFilter, effectiveOpeningBalance, laborSource, employees, subscriptions, products]
   );
 
   // Snapshot of payroll commitment for sub-card

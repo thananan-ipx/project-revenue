@@ -4,9 +4,11 @@ import React, { useRef } from "react";
 import { Project } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
-  Briefcase, Landmark, Users,
+  Briefcase, Users,
   Download, Upload, Moon, Sun, Laptop, DollarSign,
   FolderKanban, CalendarRange, LogOut, User as UserIcon, Banknote,
+  Repeat, Package, Building2, BarChart3, Receipt,
+  type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -22,6 +24,9 @@ export type SidebarViewId =
   | "resource_planning"
   | "company_analytics"
   | "cashflow"
+  | "subscriptions"
+  | "master_products"
+  | "master_customers"
   | "master_positions"
   | "master_overheads"
   | "master_employees";
@@ -33,6 +38,46 @@ const PROJECT_SCOPE_VIEWS: SidebarViewId[] = [
   "overhead_alloc",
   "quote_settings",
   "quote",
+];
+
+interface NavItem {
+  id: SidebarViewId;
+  label: string;
+  icon: LucideIcon;
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+// เมนูจัดกลุ่มเป็นหมวดหมู่ — แก้/เพิ่มเมนูที่นี่ที่เดียว
+const NAV_SECTIONS: NavSection[] = [
+  {
+    title: "ดำเนินงาน",
+    items: [
+      { id: "projects_list", label: "จัดการโครงการ", icon: FolderKanban },
+      { id: "resource_planning", label: "Resource Planning", icon: CalendarRange },
+    ],
+  },
+  {
+    title: "รายรับ & การเงิน",
+    items: [
+      { id: "subscriptions", label: "รายรับประจำ", icon: Repeat },
+      { id: "cashflow", label: "Cashflow", icon: Banknote },
+      { id: "company_analytics", label: "Company Analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "ข้อมูลหลัก",
+    items: [
+      { id: "master_customers", label: "ลูกค้า", icon: Building2 },
+      { id: "master_products", label: "สินค้า/แพ็กเกจ", icon: Package },
+      { id: "master_positions", label: "ข้อมูลเรตตำแหน่งงาน", icon: Briefcase },
+      { id: "master_employees", label: "รายชื่อพนักงาน", icon: Users },
+      { id: "master_overheads", label: "ค่าใช้จ่ายส่วนกลาง", icon: Receipt },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -95,77 +140,32 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Main Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        <Button
-          variant={isProjectFlow ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onSelectView("projects_list")}
-          className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
-        >
-          <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-          จัดการโครงการ
-        </Button>
-
-        <Button
-          variant={activeView === "resource_planning" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onSelectView("resource_planning")}
-          className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
-        >
-          <CalendarRange className="h-4 w-4 shrink-0 text-muted-foreground" />
-          Resource Planning
-        </Button>
-
-        <Button
-          variant={activeView === "company_analytics" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onSelectView("company_analytics")}
-          className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
-        >
-          <Landmark className="h-4 w-4 shrink-0 text-muted-foreground" />
-          Company Analytics
-        </Button>
-
-        <Button
-          variant={activeView === "cashflow" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onSelectView("cashflow")}
-          className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
-        >
-          <Banknote className="h-4 w-4 shrink-0 text-muted-foreground" />
-          Cashflow
-        </Button>
-
-        <Button
-          variant={activeView === "master_positions" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onSelectView("master_positions")}
-          className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
-        >
-          <Briefcase className="h-4 w-4 shrink-0 text-muted-foreground" />
-          ข้อมูลเรตตำแหน่งงาน
-        </Button>
-
-        <Button
-          variant={activeView === "master_employees" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onSelectView("master_employees")}
-          className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
-        >
-          <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-          รายชื่อพนักงาน
-        </Button>
-
-        <Button
-          variant={activeView === "master_overheads" ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onSelectView("master_overheads")}
-          className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
-        >
-          <Landmark className="h-4 w-4 shrink-0 text-muted-foreground" />
-          ค่าใช้จ่ายส่วนกลาง
-        </Button>
+      {/* Main Navigation — grouped */}
+      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.title} className="space-y-1">
+            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+              {section.title}
+            </div>
+            {section.items.map((item) => {
+              const active =
+                item.id === "projects_list" ? isProjectFlow : activeView === item.id;
+              const Icon = item.icon;
+              return (
+                <Button
+                  key={item.id}
+                  variant={active ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => onSelectView(item.id)}
+                  className="w-full justify-start text-sm font-semibold h-11 gap-2.5 px-3"
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {item.label}
+                </Button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* Footer: User + Backup + Theme */}

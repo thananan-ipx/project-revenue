@@ -1,4 +1,4 @@
-import { PositionRate, OverheadItem, Project, Employee } from "./types";
+import { PositionRate, OverheadItem, Project, Employee, Product, Subscription, Customer } from "./types";
 
 // วันที่อ้างอิงเริ่มต้นของ overhead ทั้งหมด (สามารถปรับใน UI ภายหลัง)
 const DEFAULT_EFFECTIVE_FROM = "2024-01-01";
@@ -22,6 +22,43 @@ export const DEFAULT_OVERHEADS: OverheadItem[] = [
   { id: "o4", name: "เงินเดือนพนักงานธุรการและบัญชี (Admin Salaries)", cost: 45000, period: "monthly", effectiveFrom: DEFAULT_EFFECTIVE_FROM },
   { id: "o5", name: "ค่าเสื่อมราคาและค่าใช้จ่ายจิปาถะ (Misc & Depreciation)", cost: 5000, period: "monthly", effectiveFrom: DEFAULT_EFFECTIVE_FROM },
 ];
+
+// ====================================================
+// Recurring Revenue — Products & Subscriptions (ตัวอย่างเริ่มต้น)
+// ====================================================
+export const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: "prod_crm_pro",
+    name: "CRM สำนักงานบัญชี – Pro",
+    description: "White-label CRM สำหรับสำนักงานบัญชี (แพ็กเกจ Pro)",
+    billingType: "subscription",
+    billingCycle: "yearly",
+    defaultPrice: 36000,
+    active: true,
+  },
+  {
+    id: "prod_crm_basic",
+    name: "CRM สำนักงานบัญชี – Basic",
+    description: "White-label CRM แพ็กเกจเริ่มต้น เก็บเงินรายเดือน",
+    billingType: "subscription",
+    billingCycle: "monthly",
+    defaultPrice: 1500,
+    active: true,
+  },
+  {
+    id: "prod_crm_license",
+    name: "CRM สำนักงานบัญชี – License 1 ปี",
+    description: "ขายขาดเป็น license ใช้งานได้ 1 ปี",
+    billingType: "license",
+    defaultTermMonths: 12,
+    defaultPrice: 30000,
+    active: true,
+  },
+];
+
+export const DEFAULT_SUBSCRIPTIONS: Subscription[] = [];
+
+export const DEFAULT_CUSTOMERS: Customer[] = [];
 
 export const DEFAULT_PROJECTS: Project[] = [
   {
