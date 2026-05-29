@@ -8,18 +8,21 @@ import { useEmployees } from "@/hooks/use-employees";
 import { useProducts } from "@/hooks/use-products";
 import { useSubscriptions } from "@/hooks/use-subscriptions";
 import { useCustomers } from "@/hooks/use-customers";
+import { useCommissionPayees } from "@/hooks/use-commission-payees";
+import { useCommissions } from "@/hooks/use-commissions";
 import { useCashflowSettings, CashflowSettings } from "@/hooks/use-cashflow-settings";
 import { useCompanyInfo, DEFAULT_COMPANY_INFO } from "@/hooks/use-company-info";
 import { useActiveProject } from "@/hooks/use-active-project";
 import {
   ProjectSchema, PositionRateSchema, OverheadItemSchema, EmployeeSchema, CompanyInfoSchema,
   ProductSchema, SubscriptionSchema, CustomerSchema,
+  CommissionPayeeSchema, CommissionSchema,
   safeParse, safeParseArray,
 } from "@/lib/schemas";
 import {
   migrateProjectChain, migratePositionChain, migrateOverheadChain,
 } from "@/lib/migrations";
-import { Project, PositionRate, OverheadItem, Employee, CompanyInfo, Product, Subscription, Customer } from "@/lib/types";
+import { Project, PositionRate, OverheadItem, Employee, CompanyInfo, Product, Subscription, Customer, CommissionPayee, Commission } from "@/lib/types";
 import { extractCustomersFromRecords, toSubscriptionCustomer, toClientInfo } from "@/lib/customers";
 
 interface AppStateContextType {
@@ -67,6 +70,16 @@ interface AppStateContextType {
   deleteCustomer: (id: string) => void;
   /** ดึงลูกค้าที่ฝังอยู่ใน subscription/project (ที่ยังไม่ผูก) ออกมาเป็น master + ผูก customerId — คืนจำนวนลูกค้าใหม่ */
   importCustomersFromExisting: () => number;
+  // Commission payee CRUD (master)
+  commissionPayees: CommissionPayee[];
+  addCommissionPayee: (item: Omit<CommissionPayee, "id">) => CommissionPayee;
+  updateCommissionPayee: (updated: CommissionPayee) => void;
+  deleteCommissionPayee: (id: string) => void;
+  // Commission CRUD
+  commissions: Commission[];
+  addCommission: (item: Omit<Commission, "id">) => void;
+  updateCommission: (updated: Commission) => void;
+  deleteCommission: (id: string) => void;
   // Cashflow settings (anchor for balance carryover)
   cashflowSettings: CashflowSettings;
   setCashflowSettings: (s: CashflowSettings) => void;
@@ -106,6 +119,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const customersApi = useCustomers();
   const { customers, replaceAllCustomers } = customersApi;
+
+  const commissionPayeesApi = useCommissionPayees();
+  const { payees: commissionPayees, replaceAllPayees: replaceAllCommissionPayees } = commissionPayeesApi;
+
+  const commissionsApi = useCommissions();
+  const { commissions, replaceAllCommissions } = commissionsApi;
 
   const { cashflowSettings, setCashflowSettings, hydrated: cashflowHydrated } = useCashflowSettings();
 
@@ -227,14 +246,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [subscriptions, projects, customers, replaceAllCustomers, subscriptionsApi, updateProject]);
 
   const exportData = useCallback(() => {
-    const dataStr = JSON.stringify({ projects, positions, overheads, employees, products, subscriptions, customers, companyInfo, cashflowSettings });
+    const dataStr = JSON.stringify({ projects, positions, overheads, employees, products, subscriptions, customers, commissionPayees, commissions, companyInfo, cashflowSettings });
     const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
     const filename = `software_cost_estimation_backup_${new Date().toISOString().split("T")[0]}.json`;
     const link = document.createElement("a");
     link.setAttribute("href", dataUri);
     link.setAttribute("download", filename);
     link.click();
-  }, [projects, positions, overheads, employees, products, subscriptions, customers, companyInfo, cashflowSettings]);
+  }, [projects, positions, overheads, employees, products, subscriptions, customers, commissionPayees, commissions, companyInfo, cashflowSettings]);
 
   const importData = useCallback(
     (jsonDataStr: string): boolean => {
@@ -272,6 +291,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (Array.isArray(parsed.customers)) {
           replaceAllCustomers(safeParseArray(CustomerSchema, parsed.customers, "import.customers"));
         }
+        if (Array.isArray(parsed.commissionPayees)) {
+          replaceAllCommissionPayees(safeParseArray(CommissionPayeeSchema, parsed.commissionPayees, "import.commissionPayees"));
+        }
+        if (Array.isArray(parsed.commissions)) {
+          replaceAllCommissions(safeParseArray(CommissionSchema, parsed.commissions, "import.commissions"));
+        }
         if (parsed.companyInfo) {
           setCompanyInfo(
             safeParse(CompanyInfoSchema, parsed.companyInfo, DEFAULT_COMPANY_INFO, "import.companyInfo")
@@ -286,10 +311,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    [replaceAllProjects, replaceAllPositions, replaceAllOverheads, replaceAllEmployees, replaceAllProducts, replaceAllSubscriptions, replaceAllCustomers, setCompanyInfo, setActiveProjectId]
+    [replaceAllProjects, replaceAllPositions, replaceAllOverheads, replaceAllEmployees, replaceAllProducts, replaceAllSubscriptions, replaceAllCustomers, replaceAllCommissionPayees, replaceAllCommissions, setCompanyInfo, setActiveProjectId]
   );
 
-  const isLoaded = projectsHydrated && companyHydrated && positionsApi.hydrated && overheadsApi.hydrated && employeesApi.hydrated && productsApi.hydrated && subscriptionsApi.hydrated && customersApi.hydrated && cashflowHydrated;
+  const isLoaded = projectsHydrated && companyHydrated && positionsApi.hydrated && overheadsApi.hydrated && employeesApi.hydrated && productsApi.hydrated && subscriptionsApi.hydrated && customersApi.hydrated && commissionPayeesApi.hydrated && commissionsApi.hydrated && cashflowHydrated;
 
   const value = useMemo(() => ({
     isLoaded,
@@ -328,6 +353,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateCustomer,
     deleteCustomer,
     importCustomersFromExisting,
+    commissionPayees,
+    addCommissionPayee: commissionPayeesApi.addPayee,
+    updateCommissionPayee: commissionPayeesApi.updatePayee,
+    deleteCommissionPayee: commissionPayeesApi.deletePayee,
+    commissions,
+    addCommission: commissionsApi.addCommission,
+    updateCommission: commissionsApi.updateCommission,
+    deleteCommission: commissionsApi.deleteCommission,
     cashflowSettings,
     setCashflowSettings,
     exportData,
@@ -343,6 +376,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     subscriptionsApi.updateSubscription, subscriptionsApi.deleteSubscription,
     customers, customersApi.addCustomer, updateCustomer,
     deleteCustomer, importCustomersFromExisting,
+    commissionPayees, commissionPayeesApi.addPayee, commissionPayeesApi.updatePayee,
+    commissionPayeesApi.deletePayee, commissions, commissionsApi.addCommission,
+    commissionsApi.updateCommission, commissionsApi.deleteCommission,
     cashflowSettings, setCashflowSettings, exportData, importData
   ]);
 

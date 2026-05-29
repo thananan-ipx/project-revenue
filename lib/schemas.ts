@@ -112,6 +112,45 @@ export const SubscriptionSchema = z.object({
 export type SubscriptionInput = z.infer<typeof SubscriptionSchema>;
 
 // ====================================================
+// Commission — ผู้รับคอม + รายการคอม
+// ====================================================
+export const PayeeTypeSchema = z.enum(["employee", "partner"]);
+
+export const CommissionPayeeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: PayeeTypeSchema,
+  employeeId: z.string().optional(),
+  defaultRatePercent: z.number().min(0).max(100).optional(),
+  contactEmail: z.string().optional(),
+  contactPhone: z.string().optional(),
+  active: z.boolean(),
+  notes: z.string().optional(),
+});
+export type CommissionPayeeInput = z.infer<typeof CommissionPayeeSchema>;
+
+export const CommissionSourceTypeSchema = z.enum(["project", "subscription"]);
+export const CommissionBasisSchema = z.enum(["percent", "fixed"]);
+export const SubscriptionCommissionModeSchema = z.enum(["one_time", "recurring"]);
+export const CommissionStatusSchema = z.enum(["pending", "paid", "cancelled"]);
+
+export const CommissionSchema = z.object({
+  id: z.string(),
+  payeeId: z.string(),
+  sourceType: CommissionSourceTypeSchema,
+  sourceId: z.string(),
+  basis: CommissionBasisSchema,
+  ratePercent: z.number().min(0).max(100).optional(),
+  fixedAmount: z.number().min(0).optional(),
+  subscriptionMode: SubscriptionCommissionModeSchema.optional(),
+  recurringMaxPayments: z.number().int().min(1).optional(),
+  status: CommissionStatusSchema,
+  payoutDate: z.string().optional(),
+  notes: z.string().optional(),
+});
+export type CommissionInput = z.infer<typeof CommissionSchema>;
+
+// ====================================================
 // Project sub-types
 // ====================================================
 export const ProjectPositionAllocationSchema = z.object({
