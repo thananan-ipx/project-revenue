@@ -13,19 +13,20 @@ interface AuthGateProps {
  * AuthGate logic:
  * - Loading → spinner
  * - Supabase configured + no user → redirect to /login
- * - Supabase not configured (local-only mode) → render app (no auth needed)
+ * - Supabase not configured (local-only mode) → render app
  * - User logged in → render app
  */
 export function AuthGate({ children }: AuthGateProps) {
   const { loading, user, mode } = useAuth();
   const router = useRouter();
-  const needsLogin = isSupabaseConfigured() && !user && mode !== "supabase";
+
+  const needsLogin = !loading && isSupabaseConfigured() && !user && mode !== "supabase";
 
   useEffect(() => {
-    if (!loading && needsLogin) {
+    if (needsLogin) {
       router.replace("/login");
     }
-  }, [loading, needsLogin, router]);
+  }, [needsLogin, router]);
 
   if (loading || needsLogin) {
     return (
